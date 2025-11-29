@@ -8,12 +8,23 @@ def get_db_connection():
     """
     Establishes a connection to the IBM Db2 database.
     """
-    database = os.environ.get("DB2_DATABASE")
-    hostname = os.environ.get("DB2_HOSTNAME")
-    port = os.environ.get("DB2_PORT")
-    uid = os.environ.get("DB2_UID")
-    pwd = os.environ.get("DB2_PWD")
-    security = os.environ.get("DB2_SECURITY", "SSL")
+    # Try to get from Streamlit secrets first (for deployment)
+    try:
+        import streamlit as st
+        database = st.secrets.get("DB2_DATABASE")
+        hostname = st.secrets.get("DB2_HOSTNAME")
+        port = st.secrets.get("DB2_PORT")
+        uid = st.secrets.get("DB2_UID")
+        pwd = st.secrets.get("DB2_PWD")
+        security = st.secrets.get("DB2_SECURITY", "SSL")
+    except:
+        # Fall back to environment variables (for local development)
+        database = os.environ.get("DB2_DATABASE")
+        hostname = os.environ.get("DB2_HOSTNAME")
+        port = os.environ.get("DB2_PORT")
+        uid = os.environ.get("DB2_UID")
+        pwd = os.environ.get("DB2_PWD")
+        security = os.environ.get("DB2_SECURITY", "SSL")
 
     if not all([database, hostname, port, uid, pwd]):
         return None

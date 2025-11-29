@@ -14,8 +14,15 @@ def categorize_expense(text: str, categories: list):
     - notes
     Returns a dict with standardized keys.
     """
-    api_key = os.environ.get("WATSONX_API_KEY")
-    project_id = os.environ.get("WATSONX_PROJECT_ID")
+    # Try to get from Streamlit secrets first (for deployment)
+    try:
+        import streamlit as st
+        api_key = st.secrets.get("WATSONX_API_KEY")
+        project_id = st.secrets.get("WATSONX_PROJECT_ID")
+    except:
+        # Fall back to environment variables (for local development)
+        api_key = os.environ.get("WATSONX_API_KEY")
+        project_id = os.environ.get("WATSONX_PROJECT_ID")
     
     if not api_key or not project_id:
         return {"error": "Missing Watsonx credentials"}
