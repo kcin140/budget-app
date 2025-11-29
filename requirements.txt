@@ -1,0 +1,9 @@
+streamlit
+ibm_db
+bcrypt
+python-dotenv
+pandas
+plotly
+ibm-watsonx-ai
+requests
+numpy<2
