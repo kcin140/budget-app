@@ -15,6 +15,10 @@ def category_progress_chart(categories_data, category_spending):
     
     for cat in categories_data:
         cat_name = cat['name']
+        # Skip Mortgage to prevent scale skewing
+        if cat_name == 'Mortgage':
+            continue
+            
         planned = float(cat['planned_amount'])
         actual = category_spending[category_spending['category'] == cat_name]['amount'].sum() if cat_name in category_spending['category'].values else 0
         
