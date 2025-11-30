@@ -5,10 +5,17 @@ A private budget-tracking mobile-friendly app using Streamlit, Google Sheets, an
 ## Features
 
 - 📊 **Monthly Dashboard** with spending charts and progress tracking
-- 🤖 **AI-powered expense parsing** - enter expenses in natural language
+### 📸 Receipt Scanning
+- **Visual Recognition**: Upload photos or take pictures of receipts directly in the app.
+- **AI Parsing**: Uses Llama 3.2 Vision to extract line items, prices, and descriptions.
+- **Smart Categorization**: Automatically maps receipt items to your budget categories.
+- **HEIC Support**: Works seamlessly with iPhone photos.
+
+### 🤖 AI-Powered Categorization
+- **AI-powered expense parsing** - enter expenses in natural language
 - 📝 **Multiple expenses at once** - "20 at Costco for groceries and 15 for toiletries"
-- � **Monthly sheets** - each month gets its own sheet with summary table
-- �🗑️ **Delete transactions** - remove accidental entries
+- 🗓️ **Monthly sheets** - each month gets its own sheet with summary table
+- 🗑️ **Delete transactions** - remove accidental entries
 - ✏️ **Manage categories** - add, edit, delete, and sort categories
 - 📱 **Mobile-friendly** - works great on phones
 

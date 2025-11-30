@@ -113,7 +113,132 @@ if page == "Dashboard":
 elif page == "Add Expense":
     st.title("Add Expense")
     
-    tab_ai, tab_manual = st.tabs(["AI Input", "Manual Input"])
+    tab_receipt, tab_ai, tab_manual = st.tabs(["📸 Receipt Photo", "🤖 AI Input", "✍️ Manual Input"])
+    
+    with tab_receipt:
+        st.subheader("Scan Receipt")
+        st.info("📱 On mobile: Use camera to snap a photo. 💻 On desktop: Upload a saved image.")
+        
+        # Camera input (works on mobile)
+        camera_photo = st.camera_input("Take a picture of your receipt")
+        
+        # File uploader (works on desktop)
+        uploaded_file = st.file_uploader("Or upload a receipt image", type=['jpg', 'jpeg', 'png', 'heic'])
+        
+        # Use whichever input is available
+        image_source = camera_photo if camera_photo else uploaded_file
+        
+        if image_source:
+            try:
+                # Get the bytes
+                image_bytes = image_source.getvalue()
+                
+                # Register HEIF opener for HEIC files (iPhone photos)
+                try:
+                    from pillow_heif import register_heif_opener
+                    register_heif_opener()
+                except ImportError:
+                    pass  # HEIF support not available
+                
+                # Validate it's a real image
+                from PIL import Image
+                from io import BytesIO
+                test_image = Image.open(BytesIO(image_bytes))
+                test_image.verify()  # Verify it's a valid image
+                
+                # Display the image
+                st.image(image_bytes, caption="Receipt Image", use_container_width=True)
+                
+                if st.button("🔍 Parse Receipt", type="primary"):
+                    with st.spinner("Analyzing receipt with AI..."):
+                        from utils.receipt_parser import parse_receipt_image
+                        
+                        # Parse receipt
+                        result = parse_receipt_image(image_bytes, category_names)
+                        
+                    if "error" in result:
+                        st.error(f"Error: {result['error']}")
+                        if "raw" in result:
+                            with st.expander("Show raw response"):
+                                st.code(result['raw'])
+                    else:
+                        items = result.get('items', [])
+                        if items:
+                            st.session_state.receipt_items = items
+                            st.success(f"✅ Found {len(items)} item(s) on receipt!")
+                        else:
+                            st.warning("No items found on receipt. Try manual entry instead.")
+                            if "raw" in result:
+                                with st.expander("Debug: Raw Model Response"):
+                                    st.text(result['raw'])
+            
+            except Exception as e:
+                st.error(f"Invalid image file: {e}")
+                st.info("Please upload a valid image file (JPG, PNG, or HEIC)")
+        
+        # Display parsed items for review
+        if 'receipt_items' in st.session_state:
+            items = st.session_state.receipt_items
+            
+            st.write(f"**Review {len(items)} item(s):**")
+            
+            # Store edited items
+            if 'edited_receipt_items' not in st.session_state:
+                st.session_state.edited_receipt_items = items.copy()
+            
+            # Display each item for editing
+            for idx, item in enumerate(st.session_state.edited_receipt_items):
+                with st.expander(f"Item {idx + 1}: {item.get('description', 'Unknown')} - ${item.get('amount', 0):.2f}", expanded=True):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        description = st.text_input(f"Description", value=item.get('description', ''), key=f"receipt_desc_{idx}")
+                        amount = st.number_input(f"Amount", value=float(item.get('amount', 0)), key=f"receipt_amount_{idx}")
+                    with col2:
+                        category = st.selectbox(f"Category", category_names,
+                                               index=category_names.index(item.get('category')) if item.get('category') in category_names else 0,
+                                               key=f"receipt_category_{idx}")
+                        item_date = st.date_input(f"Date", value=datetime.now(), key=f"receipt_date_{idx}")
+                    
+                    # Update item
+                    st.session_state.edited_receipt_items[idx] = {
+                        'description': description,
+                        'amount': amount,
+                        'category': category,
+                        'date': item_date
+                    }
+            
+            # Save all button
+            col1, col2 = st.columns([1, 4])
+            with col1:
+                if st.button("💾 Save All", type="primary", key="save_receipt_items"):
+                    try:
+                        saved_count = 0
+                        for item in st.session_state.edited_receipt_items:
+                            add_transaction(
+                                category=item['category'],
+                                amount=item['amount'],
+                                vendor=item['description'],  # Use description as vendor
+                                notes=f"From receipt",
+                                date=datetime.combine(item.get('date', datetime.now()), datetime.min.time())
+                            )
+                            saved_count += 1
+                        
+                        st.success(f"✅ Saved {saved_count} item(s)!")
+                        del st.session_state.receipt_items
+                        del st.session_state.edited_receipt_items
+                        st.cache_data.clear()
+                        time.sleep(1)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error saving: {e}")
+                        import traceback
+                        st.code(traceback.format_exc())
+            with col2:
+                if st.button("❌ Cancel", key="cancel_receipt"):
+                    del st.session_state.receipt_items
+                    if 'edited_receipt_items' in st.session_state:
+                        del st.session_state.edited_receipt_items
+                    st.rerun()
     
     with tab_ai:
         st.subheader("Natural Language Input")

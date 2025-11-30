@@ -7,3 +7,5 @@ plotly
 ibm-watsonx-ai
 requests
 numpy<2
+Pillow
+pillow-heif
