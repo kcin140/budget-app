@@ -1,6 +1,6 @@
 streamlit
-ibm_db
-bcrypt
+gspread
+google-auth
 python-dotenv
 pandas
 plotly

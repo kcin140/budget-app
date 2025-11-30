@@ -29,4 +29,9 @@ Thumbs.db
 # Debug files
 debug_db.py
 create_default_user.py
-db2_ssl_cert.pem
+db_client.py
+schema.sql
+init_db.py
+
+# Google Sheets service account
+service_account.json

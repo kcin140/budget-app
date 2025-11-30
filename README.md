@@ -1,95 +1,90 @@
 # Budget App
 
-A private budget-tracking mobile-friendly app using Streamlit, IBM Db2, and IBM watsonx.ai.
+A private budget-tracking mobile-friendly app using Streamlit, Google Sheets, and IBM watsonx.ai.
 
 ## Features
 
-- 📊 **Dashboard** with spending charts and progress tracking
+- 📊 **Monthly Dashboard** with spending charts and progress tracking
 - 🤖 **AI-powered expense parsing** - enter expenses in natural language
 - 📝 **Multiple expenses at once** - "20 at Costco for groceries and 15 for toiletries"
-- 🗑️ **Delete transactions** - remove accidental entries
+- � **Monthly sheets** - each month gets its own sheet with summary table
+- �🗑️ **Delete transactions** - remove accidental entries
 - ✏️ **Manage categories** - add, edit, delete, and sort categories
 - 📱 **Mobile-friendly** - works great on phones
 
-## Local Setup
+## Quick Start
 
-1.  **Install Requirements**
-    ```bash
-    pip install -r requirements.txt
-    ```
+### 1. Setup Google Sheets
 
-2.  **Environment Variables**
-    Create a `.env` file with your credentials:
-    ```bash
-    DB2_DATABASE="bludb"
-    DB2_HOSTNAME="your-db2-hostname"
-    DB2_PORT="32304"
-    DB2_UID="your-username"
-    DB2_PWD="your-password"
-    DB2_SECURITY="SSL"
-    WATSONX_API_KEY="your-api-key"
-    WATSONX_PROJECT_ID="your-project-id"
-    ```
+Follow the detailed guide in [GOOGLE_SHEETS_SETUP.md](GOOGLE_SHEETS_SETUP.md)
 
-3.  **Database Setup**
-    Run the schema in your Db2 console:
-    ```bash
-    python init_db.py
-    ```
+**Summary:**
+1. Create Google Cloud project
+2. Enable Google Sheets API
+3. Create service account and download JSON key
+4. Create a Google Spreadsheet
+5. Share it with the service account email
 
-4.  **Create Default User**
-    ```bash
-    python create_default_user.py
-    ```
+### 2. Local Development
 
-5.  **Run the App**
-    ```bash
-    streamlit run app.py
-    ```
+```bash
+# Install dependencies
+pip install -r requirements.txt
 
-## Deployment to Streamlit Community Cloud
+# Create .env file
+echo 'SPREADSHEET_ID="your-spreadsheet-id"' > .env
+echo 'WATSONX_API_KEY="your-key"' >> .env
+echo 'WATSONX_PROJECT_ID="your-project"' >> .env
 
-### Prerequisites
-- GitHub account
-- Streamlit Community Cloud account (free at [share.streamlit.io](https://share.streamlit.io))
+# Place service_account.json in project root
 
-### Steps
+# Run the app
+streamlit run app.py
+```
 
-1.  **Push to GitHub**
-    ```bash
-    git init
-    git add .
-    git commit -m "Initial commit"
-    git branch -M main
-    git remote add origin https://github.com/YOUR_USERNAME/budget-app.git
-    git push -u origin main
-    ```
+### 3. Deploy to Streamlit Cloud
 
-2.  **Deploy on Streamlit Cloud**
-    - Go to [share.streamlit.io](https://share.streamlit.io)
-    - Click "New app"
-    - Select your GitHub repository
-    - Set main file path: `app.py`
-    - Click "Advanced settings" and add your secrets:
-      ```toml
-      DB2_DATABASE = "bludb"
-      DB2_HOSTNAME = "your-hostname"
-      DB2_PORT = "32304"
-      DB2_UID = "your-username"
-      DB2_PWD = "your-password"
-      DB2_SECURITY = "SSL"
-      WATSONX_API_KEY = "your-api-key"
-      WATSONX_PROJECT_ID = "your-project-id"
-      ```
-    - Click "Deploy"
+1. Push to GitHub
+2. Go to [share.streamlit.io](https://share.streamlit.io)
+3. Deploy your app
+4. Add secrets (see [GOOGLE_SHEETS_SETUP.md](GOOGLE_SHEETS_SETUP.md) for format)
 
-3.  **Access on Mobile**
-    - Open the deployed URL in your phone's browser
-    - **iOS**: Tap Share → "Add to Home Screen"
-    - **Android**: Tap Menu (⋮) → "Add to Home screen"
+### 4. Access on Mobile
 
-## Notes
+- Open deployed URL in phone browser
+- **iOS**: Safari → Share → "Add to Home Screen"
+- **Android**: Chrome → Menu → "Add to Home screen"
 
-- The app uses a single default user (no authentication required)
-- All data is stored in your IBM Db2 database
-- The SSL certificate is embedded in the code for Db2 connection
+## How It Works
+
+### Data Structure
+
+**Categories Sheet:**
+- Stores all budget categories and their planned amounts
+
+**Monthly Sheets (e.g., "2024-11"):**
+- **Summary Table** (top): Shows planned vs actual spending per category
+- **Transaction List** (below): All expenses for that month
+
+### Monthly Summary Example
+
+```
+Expenses
+                Planned    Actual    Diff.
+Totals          $5,777     $750      +$5,027
+
+Grocery (Costco)  $200      $50      +$150
+Eating Out        $200      $120     +$80
+...
+```
+
+## Tech Stack
+
+- **Frontend**: Streamlit
+- **Database**: Google Sheets
+- **AI**: IBM watsonx.ai (Llama 3.3 70B)
+- **Charts**: Plotly
+
+## License
+
+MIT
