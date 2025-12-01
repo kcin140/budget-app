@@ -1,8 +1,12 @@
 import ibm_db
 import os
 from dotenv import load_dotenv
+from datetime import datetime
+import uuid
 
 load_dotenv()
+
+DEFAULT_USER_ID = "default-user-001"
 
 def get_db_connection():
     """
@@ -91,7 +95,7 @@ def execute_query(conn, sql, params=None):
             ibm_db.execute(stmt)
 
         # Check if it's a SELECT query
-        if sql.strip().upper().startswith("SELECT"):
+        if sql.strip().upper().startswith("SELECT") or sql.strip().upper().startswith("WITH"):
             result = []
             dictionary = ibm_db.fetch_assoc(stmt)
             while dictionary:
@@ -115,3 +119,186 @@ def execute_query(conn, sql, params=None):
         # We don't close the connection here to allow reuse, 
         # but in a real app we might want to manage this better.
         pass
+
+# ===== CATEGORY FUNCTIONS =====
+
+def get_categories():
+    """Get all categories"""
+    conn = get_db_connection()
+    if not conn:
+        return []
+    
+    try:
+        sql = "SELECT name, planned_amount FROM categories ORDER BY name"
+        results = execute_query(conn, sql)
+        return results
+    except Exception as e:
+        print(f"Error getting categories: {e}")
+        return []
+    finally:
+        if conn:
+            ibm_db.close(conn)
+
+def add_category(name, planned_amount):
+    """Add a new category"""
+    conn = get_db_connection()
+    if not conn:
+        raise Exception("Database connection failed")
+    
+    try:
+        sql = "INSERT INTO categories (name, planned_amount) VALUES (?, ?)"
+        execute_query(conn, sql, (name, planned_amount))
+    finally:
+        if conn:
+            ibm_db.close(conn)
+
+def update_category(old_name, new_name, planned_amount):
+    """Update a category"""
+    conn = get_db_connection()
+    if not conn:
+        raise Exception("Database connection failed")
+    
+    try:
+        sql = "UPDATE categories SET name = ?, planned_amount = ? WHERE name = ?"
+        execute_query(conn, sql, (new_name, planned_amount, old_name))
+    finally:
+        if conn:
+            ibm_db.close(conn)
+
+def delete_category(name):
+    """Delete a category"""
+    conn = get_db_connection()
+    if not conn:
+        raise Exception("Database connection failed")
+    
+    try:
+        sql = "DELETE FROM categories WHERE name = ?"
+        execute_query(conn, sql, (name,))
+    finally:
+        if conn:
+            ibm_db.close(conn)
+
+# ===== TRANSACTION FUNCTIONS =====
+
+def add_transaction(category, amount, vendor, notes='', date=None):
+    """Add a transaction"""
+    conn = get_db_connection()
+    if not conn:
+        raise Exception("Database connection failed")
+    
+    if date is None:
+        date = datetime.now()
+    
+    try:
+        # Get category ID
+        cat_sql = "SELECT id FROM categories WHERE name = ?"
+        cat_result = execute_query(conn, cat_sql, (category,))
+        if not cat_result:
+            raise Exception(f"Category '{category}' not found")
+        category_id = cat_result[0]['id']
+        
+        # Insert transaction
+        sql = """
+            INSERT INTO transactions (user_id, category_id, amount, vendor, notes, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """
+        execute_query(conn, sql, (DEFAULT_USER_ID, category_id, amount, vendor, notes, date))
+    finally:
+        if conn:
+            ibm_db.close(conn)
+
+def get_transactions(month_name=None):
+    """
+    Get all transactions.
+    month_name: 'YYYY-MM' string. If None, returns all (or maybe current month? Sheets returned all for a sheet).
+    """
+    conn = get_db_connection()
+    if not conn:
+        return []
+    
+    try:
+        sql = """
+            SELECT t.id, t.timestamp, t.vendor, c.name as category, t.amount, t.notes
+            FROM transactions t
+            JOIN categories c ON t.category_id = c.id
+            WHERE t.user_id = ?
+        """
+        params = [DEFAULT_USER_ID]
+        
+        if month_name:
+            # DB2 specific date filtering
+            # Assuming timestamp is standard SQL timestamp
+            sql += " AND VARCHAR_FORMAT(t.timestamp, 'YYYY-MM') = ?"
+            params.append(month_name)
+            
+        sql += " ORDER BY t.timestamp DESC"
+        
+        results = execute_query(conn, sql, params)
+        
+        # Format for app compatibility
+        formatted_results = []
+        for row in results:
+            formatted_results.append({
+                'date': row['timestamp'].strftime('%Y-%m-%d') if hasattr(row['timestamp'], 'strftime') else str(row['timestamp'])[:10],
+                'vendor': row['vendor'],
+                'category': row['category'],
+                'amount': float(row['amount']),
+                'notes': row['notes'],
+                'row': row['id'], # Using ID as row for compatibility with delete logic
+                'id': row['id']
+            })
+            
+        return formatted_results
+    except Exception as e:
+        print(f"Error getting transactions: {e}")
+        return []
+    finally:
+        if conn:
+            ibm_db.close(conn)
+
+def delete_transaction(month_name, transaction_id):
+    """
+    Delete a transaction.
+    month_name is ignored but kept for compatibility with sheets_client signature.
+    transaction_id is the database ID.
+    """
+    conn = get_db_connection()
+    if not conn:
+        raise Exception("Database connection failed")
+    
+    try:
+        sql = "DELETE FROM transactions WHERE id = ? AND user_id = ?"
+        execute_query(conn, sql, (transaction_id, DEFAULT_USER_ID))
+    finally:
+        if conn:
+            ibm_db.close(conn)
+
+def get_available_months():
+    """Get list of months that have transactions"""
+    conn = get_db_connection()
+    if not conn:
+        return []
+    
+    try:
+        sql = """
+            SELECT DISTINCT VARCHAR_FORMAT(timestamp, 'YYYY-MM') as month_str
+            FROM transactions
+            WHERE user_id = ?
+            ORDER BY month_str DESC
+        """
+        results = execute_query(conn, sql, (DEFAULT_USER_ID,))
+        return [r['month_str'] for r in results]
+    except Exception as e:
+        print(f"Error getting available months: {e}")
+        return []
+    finally:
+        if conn:
+            ibm_db.close(conn)
+
+def get_month_sheet_name(date=None):
+    """
+    Helper for compatibility. Returns YYYY-MM.
+    """
+    if date is None:
+        date = datetime.now()
+    return date.strftime('%Y-%m')

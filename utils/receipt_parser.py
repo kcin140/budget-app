@@ -82,34 +82,50 @@ def parse_receipt_image(image_bytes, categories):
         categories_str = ", ".join(categories)
         
         # Construct prompt for vision model
-        # Construct prompt for vision model
-        prompt_text = f"""Analyze this receipt image and extract ALL line items with their amounts.
+        prompt_text = f"""Analyze this receipt image and extract ALL information including items, discounts, tax, and total.
 
-For each item purchased, provide:
-1. description: Brief description of what was purchased (expand abbreviations if possible, e.g., 'KS' -> 'Kirkland Signature')
-2. amount: The price (numeric value only, no $ sign)
-3. category: Pick the BEST matching category from this list: [{categories_str}]
+Return a JSON object with this structure:
+{{
+  "items": [
+    {{"description": "Item name", "amount": 5.99, "category": "Category"}},
+    ...
+  ],
+  "discounts": [
+    {{"description": "Discount description", "amount": -2.50}}
+  ],
+  "tax": 1.25,
+  "total": 15.74
+}}
+
+For each item in "items":
+1. description: Brief description (expand abbreviations, e.g., 'KS' -> 'Kirkland Signature')
+2. amount: Price as positive number (no $ sign)
+3. category: Pick BEST match from: [{categories_str}]
 
 Categorization Rules:
-- 'HOA', 'Mortgage', 'Utilities', 'Insurance', 'Debt' are for monthly BILLS, not store receipts. DO NOT use them for physical items.
-- For food/drink, use 'Grocery', 'Grocery (Costco)', or 'Eating Out'.
-- For paper towels, soap, etc., use 'Cleaning Supplies, Toiletries'.
-- For vitamins/supplements, use 'Supplemental'.
-- If unsure, use 'Misc.' or 'Personal'.
+- 'HOA', 'Mortgage', 'Utilities', 'Insurance', 'Debt' are for monthly BILLS only, NOT store items
+- Food/drink: use 'Grocery', 'Grocery (Costco)', or 'Eating Out'
+- Paper towels, soap, cleaning: use 'Cleaning Supplies, Toiletries'
+- Vitamins/supplements: use 'Supplemental'
+- If unsure: use 'Misc.' or 'Personal'
+
+For "discounts":
+- Extract any negative amounts or discounts shown (e.g., "-$2.50 off")
+- Amount should be NEGATIVE
+
+For "tax":
+- Extract the tax amount (positive number)
+
+For "total":
+- Extract the final total amount from the receipt
 
 Important:
-- Extract EVERY item on the receipt, not just the total
-- If multiple items of the same type, list them separately
-- Ignore tax, subtotal, and total lines
-- Return ONLY a JSON array, no other text
+- Extract EVERY item, discount, tax, and total
+- Items should have positive amounts
+- Discounts should have negative amounts
+- Return ONLY valid JSON, no other text
 
-Example format:
-[
-  {{"description": "Bananas", "amount": 5.99, "category": "Grocery"}},
-  {{"description": "Kirkland Signature Towels", "amount": 19.99, "category": "Cleaning Supplies, Toiletries"}}
-]
-
-Return the JSON array now:"""
+Return the JSON object now:"""
 
         # For vision models, we need to format the request differently
         # The image is typically sent as a data URL or base64 in the prompt
@@ -187,24 +203,77 @@ Return the JSON array now:"""
         import re
         
         # Try direct parse
+        parsed_data = None
         try:
-            items = json.loads(response)
-            if isinstance(items, list):
-                return {"items": items, "raw": response}
+            parsed_data = json.loads(response)
         except:
-            pass
+            # Try to extract JSON object from response
+            json_match = re.search(r'\{.*\}', response, re.DOTALL)
+            if json_match:
+                try:
+                    parsed_data = json.loads(json_match.group(0))
+                except:
+                    pass
         
-        # Try to extract JSON array from response
-        json_match = re.search(r'\[.*?\]', response, re.DOTALL)
-        if json_match:
-            try:
-                items = json.loads(json_match.group(0))
-                return {"items": items}
-            except:
-                pass
+        if not parsed_data:
+            return {"error": "Failed to parse receipt", "raw": response}
         
-        # If parsing failed, return error with raw response
-        return {"error": "Failed to parse receipt", "raw": response}
+        # Validate structure
+        if not isinstance(parsed_data, dict) or 'items' not in parsed_data:
+            return {"error": "Invalid receipt data structure", "raw": response}
+        
+        items = parsed_data.get('items', [])
+        discounts = parsed_data.get('discounts', [])
+        tax = parsed_data.get('tax', 0)
+        receipt_total = parsed_data.get('total', 0)
+        
+        # Group items by category and sum amounts
+        category_totals = {}
+        for item in items:
+            category = item.get('category', 'Misc.')
+            amount = float(item.get('amount', 0))
+            
+            if category not in category_totals:
+                category_totals[category] = {
+                    'category': category,
+                    'amount': 0,
+                    'items': []
+                }
+            
+            category_totals[category]['amount'] += amount
+            category_totals[category]['items'].append({
+                'description': item.get('description', 'Unknown'),
+                'amount': amount
+            })
+        
+        # Apply discounts to the appropriate categories or create a separate entry
+        total_discounts = 0
+        for discount in discounts:
+            discount_amount = float(discount.get('amount', 0))
+            total_discounts += discount_amount
+        
+        # Calculate our total: sum of categories + discounts + tax
+        calculated_subtotal = sum(cat['amount'] for cat in category_totals.values())
+        calculated_total = calculated_subtotal + total_discounts + tax
+        
+        # Validate total (allow 1% tolerance for rounding)
+        total_diff = abs(calculated_total - receipt_total) if receipt_total > 0 else 0
+        total_valid = total_diff < (receipt_total * 0.01) if receipt_total > 0 else True
+        
+        # Convert category_totals to list
+        grouped_items = list(category_totals.values())
+        
+        return {
+            "grouped_items": grouped_items,
+            "discounts": discounts,
+            "total_discounts": total_discounts,
+            "tax": tax,
+            "receipt_total": receipt_total,
+            "calculated_total": calculated_total,
+            "total_valid": total_valid,
+            "total_diff": total_diff,
+            "raw": response
+        }
         
     except Exception as e:
         return {"error": f"Error processing receipt: {str(e)}"}

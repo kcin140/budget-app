@@ -1,6 +1,4 @@
 streamlit
-gspread
-google-auth
 python-dotenv
 pandas
 plotly
@@ -9,3 +7,4 @@ requests
 numpy<2
 Pillow
 pillow-heif
+ibm_db

@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from sheets_client import (
+from db_client import (
     get_categories, add_category, update_category, delete_category,
     add_transaction, get_transactions, delete_transaction,
     get_month_sheet_name, get_available_months
@@ -37,8 +37,8 @@ try:
         available_months = [get_month_sheet_name()]
     selected_month = st.sidebar.selectbox("Select Month", available_months, index=0)
 except Exception as e:
-    st.error(f"Error connecting to Google Sheets: {e}")
-    st.info("Make sure you've set up the Google Sheets API and added your credentials to Streamlit secrets.")
+    st.error(f"Error connecting to Database: {e}")
+    st.info("Make sure you've set up the DB2 connection and added your credentials to Streamlit secrets.")
     st.stop()
 
 page = st.sidebar.radio("Navigation", ["Dashboard", "Add Expense", "Manage Categories", "Settings"])
@@ -162,10 +162,25 @@ elif page == "Add Expense":
                             with st.expander("Show raw response"):
                                 st.code(result['raw'])
                     else:
-                        items = result.get('items', [])
-                        if items:
-                            st.session_state.receipt_items = items
-                            st.success(f"✅ Found {len(items)} item(s) on receipt!")
+                        grouped_items = result.get('grouped_items', [])
+                        if grouped_items:
+                            st.session_state.receipt_data = result
+                            
+                            # Show validation status
+                            if result.get('total_valid'):
+                                st.success(f"✅ Receipt parsed successfully! Total validated: ${result.get('receipt_total', 0):.2f}")
+                            else:
+                                st.warning(f"⚠️ Total mismatch: Receipt shows ${result.get('receipt_total', 0):.2f}, but items sum to ${result.get('calculated_total', 0):.2f} (diff: ${result.get('total_diff', 0):.2f})")
+                            
+                            # Show summary
+                            col1, col2, col3 = st.columns(3)
+                            with col1:
+                                st.metric("Categories", len(grouped_items))
+                            with col2:
+                                st.metric("Tax", f"${result.get('tax', 0):.2f}")
+                            with col3:
+                                discounts = result.get('total_discounts', 0)
+                                st.metric("Discounts", f"${discounts:.2f}")
                         else:
                             st.warning("No items found on receipt. Try manual entry instead.")
                             if "raw" in result:
@@ -177,55 +192,142 @@ elif page == "Add Expense":
                 st.info("Please upload a valid image file (JPG, PNG, or HEIC)")
         
         # Display parsed items for review
-        if 'receipt_items' in st.session_state:
-            items = st.session_state.receipt_items
+        if 'receipt_data' in st.session_state:
+            result = st.session_state.receipt_data
             
-            st.write(f"**Review {len(items)} item(s):**")
+            # Flatten grouped items into individual items for editing
+            if 'individual_items' not in st.session_state:
+                individual_items = []
+                for group in result.get('grouped_items', []):
+                    for item in group.get('items', []):
+                        individual_items.append({
+                            'description': item['description'],
+                            'amount': item['amount'],
+                            'category': group['category']
+                        })
+                st.session_state.individual_items = individual_items
             
-            # Store edited items
-            if 'edited_receipt_items' not in st.session_state:
-                st.session_state.edited_receipt_items = items.copy()
+            st.write(f"**Review {len(st.session_state.individual_items)} item(s):**")
             
             # Display each item for editing
-            for idx, item in enumerate(st.session_state.edited_receipt_items):
-                with st.expander(f"Item {idx + 1}: {item.get('description', 'Unknown')} - ${item.get('amount', 0):.2f}", expanded=True):
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        description = st.text_input(f"Description", value=item.get('description', ''), key=f"receipt_desc_{idx}")
-                        amount = st.number_input(f"Amount", value=float(item.get('amount', 0)), key=f"receipt_amount_{idx}")
-                    with col2:
-                        category = st.selectbox(f"Category", category_names,
-                                               index=category_names.index(item.get('category')) if item.get('category') in category_names else 0,
-                                               key=f"receipt_category_{idx}")
-                        item_date = st.date_input(f"Date", value=datetime.now(), key=f"receipt_date_{idx}")
-                    
-                    # Update item
-                    st.session_state.edited_receipt_items[idx] = {
-                        'description': description,
-                        'amount': amount,
-                        'category': category,
-                        'date': item_date
-                    }
+            for idx, item in enumerate(st.session_state.individual_items):
+                col1, col2, col3 = st.columns([3, 2, 1])
+                with col1:
+                    new_desc = st.text_input(
+                        "Description",
+                        value=item['description'],
+                        key=f"item_desc_{idx}",
+                        label_visibility="collapsed"
+                    )
+                with col2:
+                    new_category = st.selectbox(
+                        "Category",
+                        category_names,
+                        index=category_names.index(item['category']) if item['category'] in category_names else 0,
+                        key=f"item_cat_{idx}",
+                        label_visibility="collapsed"
+                    )
+                with col3:
+                    new_amount = st.number_input(
+                        "Amount",
+                        value=float(item['amount']),
+                        min_value=0.0,
+                        step=0.01,
+                        key=f"item_amt_{idx}",
+                        label_visibility="collapsed"
+                    )
+                
+                # Update item
+                st.session_state.individual_items[idx] = {
+                    'description': new_desc,
+                    'amount': new_amount,
+                    'category': new_category
+                }
+            
+            # Regroup items by category for display
+            category_totals = {}
+            for item in st.session_state.individual_items:
+                cat = item['category']
+                if cat not in category_totals:
+                    category_totals[cat] = 0
+                category_totals[cat] += item['amount']
+            
+            st.divider()
+            st.write("**Category Totals:**")
+            for cat, total in category_totals.items():
+                st.write(f"  • {cat}: ${total:.2f}")
+            
+            # Show discounts if any
+            discounts = result.get('discounts', [])
+            total_discounts = result.get('total_discounts', 0)
+            if discounts:
+                st.write("**Discounts:**")
+                for discount in discounts:
+                    st.write(f"  • {discount.get('description', 'Discount')}: ${discount.get('amount', 0):.2f}")
+            
+            # Show tax
+            tax = result.get('tax', 0)
+            if tax > 0:
+                st.write(f"**Tax:** ${tax:.2f}")
+            
+            # Show totals and validation
+            st.divider()
+            receipt_total = result.get('receipt_total', 0)
+            calculated_subtotal = sum(item['amount'] for item in st.session_state.individual_items)
+            calculated_total = calculated_subtotal + total_discounts + tax
+            total_diff = abs(calculated_total - receipt_total) if receipt_total > 0 else 0
+            total_valid = total_diff < (receipt_total * 0.01) if receipt_total > 0 else True
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.write(f"**Receipt Total:** ${receipt_total:.2f}")
+            with col2:
+                st.write(f"**Calculated Total:** ${calculated_total:.2f}")
+            with col3:
+                if not total_valid and receipt_total > 0:
+                    st.write(f"**Difference:** ${total_diff:.2f}")
+            
+            # Option to use receipt total if there's a mismatch
+            use_receipt_total = False
+            if not total_valid and receipt_total > 0:
+                st.warning(f"⚠️ Totals don't match (difference: ${total_diff:.2f}). This might be due to missing discounts or rounding.")
+                use_receipt_total = st.checkbox(
+                    f"Use receipt total (${receipt_total:.2f}) and distribute difference across categories",
+                    key="use_receipt_total"
+                )
             
             # Save all button
             col1, col2 = st.columns([1, 4])
             with col1:
-                if st.button("💾 Save All", type="primary", key="save_receipt_items"):
+                if st.button("💾 Save All", type="primary", key="save_items"):
                     try:
+                        # Regroup by category
+                        final_groups = {}
+                        for item in st.session_state.individual_items:
+                            cat = item['category']
+                            if cat not in final_groups:
+                                final_groups[cat] = 0
+                            final_groups[cat] += item['amount']
+                        
+                        # If using receipt total, adjust proportionally
+                        if use_receipt_total and receipt_total > 0:
+                            adjustment_factor = receipt_total / calculated_total if calculated_total > 0 else 1
+                            final_groups = {cat: amt * adjustment_factor for cat, amt in final_groups.items()}
+                        
                         saved_count = 0
-                        for item in st.session_state.edited_receipt_items:
+                        for category, amount in final_groups.items():
                             add_transaction(
-                                category=item['category'],
-                                amount=item['amount'],
-                                vendor=item['description'],  # Use description as vendor
-                                notes=f"From receipt",
-                                date=datetime.combine(item.get('date', datetime.now()), datetime.min.time())
+                                category=category,
+                                amount=amount,
+                                vendor=f"Receipt ({len([i for i in st.session_state.individual_items if i['category'] == category])} items)",
+                                notes=f"Receipt total: ${receipt_total:.2f}",
+                                date=datetime.combine(datetime.now(), datetime.min.time())
                             )
                             saved_count += 1
                         
-                        st.success(f"✅ Saved {saved_count} item(s)!")
-                        del st.session_state.receipt_items
-                        del st.session_state.edited_receipt_items
+                        st.success(f"✅ Saved {saved_count} category group(s)!")
+                        del st.session_state.receipt_data
+                        del st.session_state.individual_items
                         st.cache_data.clear()
                         time.sleep(1)
                         st.rerun()
@@ -235,10 +337,11 @@ elif page == "Add Expense":
                         st.code(traceback.format_exc())
             with col2:
                 if st.button("❌ Cancel", key="cancel_receipt"):
-                    del st.session_state.receipt_items
-                    if 'edited_receipt_items' in st.session_state:
-                        del st.session_state.edited_receipt_items
+                    del st.session_state.receipt_data
+                    if 'individual_items' in st.session_state:
+                        del st.session_state.individual_items
                     st.rerun()
+
     
     with tab_ai:
         st.subheader("Natural Language Input")
@@ -433,8 +536,8 @@ elif page == "Manage Categories":
 
 elif page == "Settings":
     st.title("Settings")
-    st.write("Google Sheets Configuration")
-    st.info("Your budget data is stored in Google Sheets. Each month gets its own sheet with a summary table and transaction list.")
+    st.write("Database Configuration")
+    st.info("Your budget data is stored in IBM DB2.")
     
     if st.button("Clear Cache"):
         st.cache_data.clear()
