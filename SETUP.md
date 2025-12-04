@@ -57,7 +57,7 @@ You need to reserve **TWO** environments from IBM TechZone to get all the requir
 
 5. Fill out the reservation form:
    - **Purpose:** Education/Demo
-   - **Duration:** Select appropriate timeframe (recommend 2+ weeks)
+   - **Duration:** Select appropriate timeframe
    - **Region:** Choose closest region to you
    - **Description:** (optional) "Budget app demo"
 
@@ -88,7 +88,7 @@ You need to reserve **TWO** environments from IBM TechZone to get all the requir
 
 4. Fill out the reservation form:
    - **Purpose:** Education/Demo
-   - **Duration:** Select appropriate timeframe (recommend 2+ weeks)
+   - **Duration:** Select appropriate timeframe
    - **Region:** Choose closest region to you
    - **Description:** (optional) "Budget app voice input"
 
