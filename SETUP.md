@@ -940,4 +940,4 @@ If you encounter issues not covered in this guide:
 
 ---
 
-**Last Updated:** December 2024
+**Last Updated:** December 2025
