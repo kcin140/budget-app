@@ -1,6 +1,3 @@
-import sys
-sys.path.insert(0, '/Users/nickkyburz/Desktop/budget-app')
-
 from db_client import get_db_connection, execute_query
 
 conn = get_db_connection()

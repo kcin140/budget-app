@@ -39,13 +39,15 @@ CREATE TABLE categorization_rules (
   FOREIGN KEY (category_id) REFERENCES categories(id)
 );
 
--- Seed Categories
+-- Seed Categories (Default budget categories for new installations)
 INSERT INTO categories (name, planned_amount) VALUES
-('Grocery (Costco)', 500),
-('Grocery (Aldi)', 300),
-('Eating Out', 200),
-('Gas', 150),
-('Rent', 1500),
-('Utilities', 200),
-('Entertainment', 100),
-('Miscellaneous', 100);
+('Housing', 3000.00),
+('Utilities', 300.00),
+('Transportation', 400.00),
+('Groceries', 600.00),
+('Dining Out', 150.00),
+('Healthcare', 150.00),
+('Personal Care', 100.00),
+('Entertainment', 100.00),
+('Debt & Savings', 700.00),
+('Miscellaneous', 100.00);

@@ -8,3 +8,7 @@ numpy<2
 Pillow
 pillow-heif
 ibm_db
+urllib3<2.0,>=1.26.7
+ibm-watson
+streamlit-mic-recorder
+pydub

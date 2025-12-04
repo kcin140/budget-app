@@ -345,23 +345,109 @@ elif page == "Add Expense":
     
     with tab_ai:
         st.subheader("Natural Language Input")
-        text_input = st.text_area("Describe your expense(s)", placeholder="e.g., 20 at Costco for groceries and 15 for toiletries")
         
-        if st.button("Parse with AI"):
-            if text_input:
-                with st.spinner("Parsing..."):
-                    result = categorize_expense(text_input, category_names)
+        # Text input for manual entry
+        text_input = st.text_area(
+            "Describe your expense(s)",
+            placeholder="e.g., 50 at grocery store and 20 at gas station",
+            key="ai_text_input",
+            height=100
+        )
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Parse with AI", type="primary", use_container_width=True):
+                if text_input:
+                    with st.spinner("Parsing..."):
+                        result = categorize_expense(text_input, category_names)
                     
-                if "error" in result:
-                    st.error(f"AI Error: {result['error']}")
+                    if "error" in result:
+                        st.error(f"Error: {result['error']}")
+                    else:
+                        expenses = result.get('expenses', [])
+                        if expenses:
+                            st.session_state.ai_expenses = expenses
+                            st.success(f"✅ Found {len(expenses)} expense(s)!")
+                        else:
+                            st.warning("No expenses found. Try rephrasing.")
                 else:
-                    st.session_state.ai_result = result
-                    st.success(f"Parsed successfully! Found {len(result.get('expenses', []))} expense(s).")
-            else:
-                st.warning("Please enter some text.")
+                    st.warning("Please enter an expense description")
         
-        if 'ai_result' in st.session_state:
-            expenses = st.session_state.ai_result.get('expenses', [])
+        # Voice input section
+        st.divider()
+        st.write("**Or use voice input:**")
+        st.info("🎤 Record your expense description, and it will be automatically transcribed and parsed!")
+        
+        try:
+            from streamlit_mic_recorder import mic_recorder
+            import io
+            from pydub import AudioSegment
+            
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                audio_data = mic_recorder(
+                    start_prompt="🎤 Start",
+                    stop_prompt="⏹️ Stop",
+                    just_once=False,
+                    use_container_width=True,
+                    key='mic_recorder'
+                )
+            
+            with col2:
+                if audio_data:
+                    if st.button("📝 Transcribe & Parse", type="primary", use_container_width=True):
+                        with st.spinner("Transcribing and parsing..."):
+                            try:
+                                # Convert audio to proper format for Watson
+                                audio_bytes = audio_data['bytes']
+                                
+                                # Load audio and convert to WAV format Watson expects
+                                audio = AudioSegment.from_file(io.BytesIO(audio_bytes))
+                                audio = audio.set_channels(1)
+                                audio = audio.set_frame_rate(16000)
+                                audio = audio.set_sample_width(2)
+                                
+                                # Export to bytes
+                                wav_io = io.BytesIO()
+                                audio.export(wav_io, format='wav')
+                                wav_bytes = wav_io.getvalue()
+                                
+                                # Transcribe using Watson
+                                from utils.speech_to_text import transcribe_audio
+                                transcribe_result = transcribe_audio(wav_bytes)
+                                
+                                if "error" in transcribe_result:
+                                    st.error(f"Transcription Error: {transcribe_result['error']}")
+                                else:
+                                    transcribed_text = transcribe_result.get('text', '')
+                                    st.success(f"✅ Transcribed: \"{transcribed_text}\"")
+                                    
+                                    # Immediately parse with AI
+                                    parse_result = categorize_expense(transcribed_text, category_names)
+                                    
+                                    if "error" in parse_result:
+                                        st.error(f"Parse Error: {parse_result['error']}")
+                                    else:
+                                        expenses = parse_result.get('expenses', [])
+                                        if expenses:
+                                            st.session_state.ai_expenses = expenses
+                                            st.success(f"✅ Found {len(expenses)} expense(s)!")
+                                            st.rerun()
+                                        else:
+                                            st.warning("No expenses found in transcription. Try again.")
+                                            
+                            except Exception as e:
+                                st.error(f"Error: {str(e)}")
+                        
+        except ImportError as e:
+            if 'pydub' in str(e):
+                st.warning("⚠️ Audio conversion library not installed.")
+            else:
+                st.info("💡 **Voice input not available.** Use text input above.")
+        
+        # Display parsed expenses for review
+        if 'ai_expenses' in st.session_state:
+            expenses = st.session_state.ai_expenses
             
             if expenses:
                 st.write(f"**Review {len(expenses)} expense(s):**")
@@ -410,7 +496,7 @@ elif page == "Add Expense":
                                 saved_count += 1
                             
                             st.success(f"Saved {saved_count} expense(s)!")
-                            del st.session_state.ai_result
+                            del st.session_state.ai_expenses
                             del st.session_state.edited_expenses
                             st.cache_data.clear()
                             time.sleep(1)
@@ -421,7 +507,7 @@ elif page == "Add Expense":
                             st.code(traceback.format_exc())
                 with col2:
                     if st.button("Cancel"):
-                        del st.session_state.ai_result
+                        del st.session_state.ai_expenses
                         if 'edited_expenses' in st.session_state:
                             del st.session_state.edited_expenses
                         st.rerun()

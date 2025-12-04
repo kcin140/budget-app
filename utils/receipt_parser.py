@@ -103,11 +103,13 @@ For each item in "items":
 3. category: Pick BEST match from: [{categories_str}]
 
 Categorization Rules:
-- 'HOA', 'Mortgage', 'Utilities', 'Insurance', 'Debt' are for monthly BILLS only, NOT store items
-- Food/drink: use 'Grocery', 'Grocery (Costco)', or 'Eating Out'
-- Paper towels, soap, cleaning: use 'Cleaning Supplies, Toiletries'
-- Vitamins/supplements: use 'Supplemental'
-- If unsure: use 'Misc.' or 'Personal'
+- 'Housing', 'Utilities', 'Debt & Savings' are for monthly BILLS only, NOT store items
+- Food/drink from stores: use 'Groceries'
+- Food/drink from restaurants: use 'Dining Out'
+- Cleaning supplies, toiletries, hygiene products: use 'Personal Care'
+- Vitamins, supplements, prescriptions: use 'Healthcare'
+- Gas, car maintenance, insurance: use 'Transportation'
+- If unsure: use 'Miscellaneous'
 
 For "discounts":
 - Extract any negative amounts or discounts shown (e.g., "-$2.50 off")
