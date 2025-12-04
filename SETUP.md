@@ -185,7 +185,7 @@ After your TechZone reservations are ready, you need to extract credentials from
 
 ### 2.3 Watson Speech to Text Credentials
 
-1. Log into IBM Cloud: https://cloud.ibm.com
+1. Log in using the login link in your reservation. NOTE: open in an incognito window because you will use the username/password combination also given in the reservation link.
 
 2. Click **Navigation menu** (☰) → **Resource list**
 
